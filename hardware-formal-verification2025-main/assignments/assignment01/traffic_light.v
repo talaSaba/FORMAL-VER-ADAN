@@ -19,7 +19,7 @@ parameter WAIT_TIME = 2;     // Car green light minimum time
 parameter GREEN_TIME = 3;    // Car green light maximum time
 parameter YELLOW_TIME = 1;   // Car yellow light time
 parameter RED_TIME = 2;      // Time before pedestrian light turns green
-
+//
 reg [24:0] car_timer;        // Timer for state transitions
 reg pedestrian_request;      // Register to store pedestrian button press
 
@@ -62,7 +62,7 @@ always @(*) begin
         end
         RED: begin
             if (car_timer >= RED_TIME)
-                next_car_state = GREEN;
+                next_car_state = GREEN;//check YELLOW
             else
                 next_car_state = RED;
         end
@@ -74,16 +74,16 @@ end
 always @(*) begin
     case (pedestrian_state)
         GREEN: begin
-            if (car_state == RED && car_timer >= RED_TIME-1)
+            if (next_car_state != RED)
                 next_pedestrian_state = RED;
             else
                 next_pedestrian_state = GREEN;
         end
         RED: begin
-            if (next_car_state != RED || car_timer != 0)
-                next_pedestrian_state = RED;
-            else
+            if (car_state == YELLOW || car_timer >= RED_TIME-1)
                 next_pedestrian_state = GREEN;
+            else
+                next_pedestrian_state = RED;
         end
         default: next_pedestrian_state = RED;
     endcase
