@@ -1,93 +1,108 @@
-// Instructions:
-// - Implement the properties in this file.
-// - Submit this file only.
-// - Don't change the name of the file when submitting.
+// Note: the design contains a bug with respect to a specification that will be given in an assignment.
 
-module properties(clk, rst, pedestrian_btn, car_light, pedestrian_light);
-input clk;
-input rst;
-input wire pedestrian_btn;
-input reg [1:0] car_light;
-input reg pedestrian_light;
-// Note that both car_light and pedestrian_light are defined as inputs above,
-// even though they are defined as outputs in the module we want to monitor.
+module traffic_light (
+    input wire clk,             // Clock signal
+    input wire rst,             // Reset signal
+    input wire pedestrian_btn,  // Pedestrian request button
+    output reg [1:0] car_light, // Car traffic light (2-bit: Red, Yellow, Green)
+    output reg pedestrian_light // Pedestrian traffic light (1-bit: Red/Green)
+);
 
+// Define the states for car and pedestrian traffic light
 import state_pkg::*;
 
-// *************** INSTRUCTION FOR PART A:   ***************
-// *************** EDIT ONLY BELOW THIS LINE ***************
-// *********************************************************
-   
-// NOTE: 
-// - Don't change the property names (P1, P2, ...) below.
-// - Don't change the labels (A1, A2, ...) below.
-// - Edit only the lines where you see "EDIT HERE".
-// - The answer for the first assert (A1) is given as an example.
+state_t car_state, next_car_state;
+state_t pedestrian_state, next_pedestrian_state;
 
-// Example solution for the first specificaton:
-property P1;
-   (@(posedge clk) (car_light == RED || pedestrian_light == RED));
-endproperty
-A1: assert property (P1);
+// Timing parameters
+parameter WAIT_TIME = 2;     // Car green light minimum time
+parameter GREEN_TIME = 3;    // Car green light maximum time
+parameter YELLOW_TIME = 1;   // Car yellow light time
+parameter RED_TIME = 2;      // Time before pedestrian light turns green
 
-property P2;
-   (@(posedge clk) (car_light==RED |=>(car_light==RED||car_light==GREEN)));
-endproperty
-A2: assert property (P2);
+reg [24:0] car_timer;        // Timer for state transitions
+reg pedestrian_request;      // Register to store pedestrian button press
 
-property P3;
-   (@(posedge clk) (car_light==GREEN |=>(car_light==YELLOW||car_light==GREEN)));
-endproperty
-A3: assert property (P3);
+// Sequential logic, updating next states
+always @(posedge clk or posedge rst) begin
+    if (rst) begin
+        car_state <= RED;
+        pedestrian_state <= RED;
+        car_timer <= 0;
+        pedestrian_request <= 0;
+    end else begin
+        car_state <= next_car_state;
+        pedestrian_state <= next_pedestrian_state;
 
-property P4;
-   (@(posedge clk) (car_light==YELLOW |=>(car_light==RED||car_light==YELLOW)));
-endproperty
-A4: assert property (P4);
+        if (car_state != next_car_state) car_timer <= 0;
+        else car_timer <= car_timer + 1;
 
-property P5;
-   (@(posedge clk) (car_light==RED || car_light==GREEN || car_light==YELLOW));
-endproperty
-A5: assert property (P5);
+        // Register the pedestrian button press
+        if (pedestrian_btn)
+            pedestrian_request <= 1;
+    end
+end
 
-property P6;
-   (@(posedge clk) (pedestrian_light==RED || pedestrian_light==GREEN));
-endproperty
-A6: assert property (P6);
+// Car traffic light state machine
+always @(*) begin
+    case (car_state)
+        GREEN: begin
+            if (pedestrian_request && car_timer >= WAIT_TIME)
+                next_car_state = YELLOW;
+            else if (car_timer >= GREEN_TIME)
+                next_car_state = YELLOW;
+            else
+                next_car_state = GREEN;
+        end
+        YELLOW: begin
+            if (car_timer >= YELLOW_TIME)
+                next_car_state = RED;
+            else
+                next_car_state = YELLOW;
+        end
+        RED: begin
+            if (car_timer >= RED_TIME)
+                next_car_state = GREEN;
+            else
+                next_car_state = RED;
+        end
+        default: next_car_state = GREEN;
+    endcase
+end
 
-property P7;
-   (@(posedge clk) (pedestrian_light==GREEN |-> car_light==RED));
-endproperty
-A7: assert property (P7);
+// Pedestrian traffic light state machine
+always @(*) begin
+    case (pedestrian_state)
+        GREEN: begin
+            if (car_state == RED && car_timer >= RED_TIME-1)
+                next_pedestrian_state = RED;
+            else
+                next_pedestrian_state = GREEN;
+        end
+        RED: begin
+            if (next_car_state != RED || car_timer != 0)
+                next_pedestrian_state = RED;
+            else
+                next_pedestrian_state = GREEN;
+        end
+        default: next_pedestrian_state = RED;
+    endcase
+end
 
-property P8;
-   (@(posedge clk) (car_light==GREEN |-> pedestrian_light==RED));
-endproperty
-A8: assert property (P8);
+// Traffic light outputs
+always @(*) begin
+    case (car_state)
+        GREEN:   car_light = GREEN;          // Green light
+        YELLOW:  car_light = YELLOW;         // Yellow light
+        RED:     car_light = RED;            // Red light
+        default: car_light = RED;            // Default to red
+    endcase
 
-property P9;
-   (@(posedge clk) (pedestrian_light==GREEN |=> $past(car_light==RED))); //check later if the arrow is correct (do we need |-> or |=>)  
-endproperty
-A9: assert property (P9);
-
-property P10;
-   (@(posedge clk) (car_light==GREEN |=> $past(pedestrian_light==RED)));
-endproperty
-A10: assert property (P10);
-
-property P11;
-   (@(posedge clk) (car_light==GREEN |=> s_eventually(car_light!=GREEN)));
-endproperty
-A11: assert property (P11);
-
-property P12;
-   (@(posedge clk) (pedestrian_light==RED |=> s_eventually(pedestrian_light!=RED)));
-endproperty
-A12: assert property (P12);
-
-// *************** EDIT ONLY ABOVE THIS LINE *****************
+    case (pedestrian_state)
+        GREEN:   pedestrian_light = GREEN;   // Green light
+        RED:     pedestrian_light = RED;     // Red light
+        default: pedestrian_light = RED;     // Default to red
+    endcase
+end
 
 endmodule
-
-// This binds the properties to traffic_light:
-bind traffic_light properties properties_i(.*);
